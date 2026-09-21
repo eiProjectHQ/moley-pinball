@@ -1,0 +1,2337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1F7FCB">
+<title>Garden Pinball</title>
+<style>
+/* ==========================================================
+   DESIGN TOKENS
+   Palette taken from Aloka's board: sky backboard, felt grass,
+   plywood, purple and gold pebbles, red flippers.
+   ========================================================== */
+:root {
+  --sky-top: #1F7FCB;
+  --sky-bottom: #7CC8EE;
+  --felt-dark: #1E5B36;
+  --felt-light: #5F9434;
+  --ply: #E9D2A4;
+  --rail: #B98A4E;
+  --blossom: #F29CB7;
+  --pebble-purple: #7E3FA6;
+  --pebble-gold: #C9A443;
+  --flipper-red: #C8362D;
+  --ink: #23301F;
+  --page: #1B3A26;
+  --panel: #FFF8EA;
+  --error: #B3261E;
+  --font: "Trebuchet MS", "Nunito", ui-rounded, "Segoe UI", Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ==========================================================
+   BACKBOARD HEADER — the painted sky from Aloka's board
+   ========================================================== */
+.backboard {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  background: linear-gradient(180deg, var(--sky-top), var(--sky-bottom));
+  border-radius: 0 0 18px 18px;
+  padding: 8px 16px 10px 64px;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.backboard-sun {
+  position: absolute;
+  left: 8px;
+  top: 6px;
+  width: 46px;
+  height: 46px;
+}
+
+.backboard-blossoms {
+  position: absolute;
+  right: 10px;
+  top: 4px;
+  width: 90px;
+  height: 50px;
+  opacity: 0.9;
+}
+
+.game-title {
+  margin: 0;
+  font-size: clamp(1.5rem, 6vw, 2rem);
+  line-height: 1.1;
+  font-weight: 900;
+  color: #8EDB6A;
+  letter-spacing: 0.02em;
+  -webkit-text-stroke: 1.5px #1E5B36;
+  paint-order: stroke fill;
+  text-shadow: 0 2px 0 rgba(20, 60, 35, 0.35);
+}
+
+.game-credit {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  color: #F4FBFF;
+}
+
+/* ==========================================================
+   HUD — score, sequence lights, ball count, pause
+   ========================================================== */
+.hud {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  color: #F4F0DE;
+  flex: 0 0 auto;
+}
+
+.hud-block {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.hud-label {
+  font-size: 0.72rem;
+  opacity: 0.8;
+}
+
+.hud-value {
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.sequence-lights {
+  display: flex;
+  gap: 5px;
+}
+
+.sequence-light {
+  width: 26px;
+  height: 22px;
+  border-radius: 6px;
+  background: #3C5A43;
+  color: #A9BFA9;
+  font-size: 0.72rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sequence-light.is-lit {
+  background: #F2C84B;
+  color: #3A2A05;
+}
+
+/* Pause, sound and leaderboard buttons */
+.hud-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.icon-button {
+  width: 34px;
+  height: 34px;
+  font-size: 1rem;
+  line-height: 1;
+  border: 2px solid #8BB38F;
+  background: transparent;
+  color: #F4F0DE;
+  border-radius: 10px;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.icon-button:focus-visible,
+.primary-button:focus-visible,
+.secondary-button:focus-visible,
+.name-input:focus-visible {
+  outline: 3px solid #F2C84B;
+  outline-offset: 2px;
+}
+
+/* ==========================================================
+   STAGE — holds the playfield canvas and the overlay panels
+   ========================================================== */
+.stage {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 560px;
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 0 6px 6px;
+  touch-action: none;
+}
+
+.board-canvas {
+  display: block;
+  border-radius: 14px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  touch-action: none;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: rgba(15, 35, 22, 0.55);
+  touch-action: auto;
+}
+
+.overlay[hidden] { display: none; }
+
+.panel {
+  width: 100%;
+  max-width: 380px;
+  max-height: 100%;
+  overflow-y: auto;
+  background: var(--panel);
+  border-radius: 16px;
+  padding: 18px 18px 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.panel[hidden] { display: none; }
+
+.panel-heading {
+  margin: 0 0 8px;
+  font-size: 1.4rem;
+  color: var(--felt-dark);
+}
+
+.panel-text {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.story-text {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.controls-hint {
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  color: #4A5A48;
+}
+
+.final-score {
+  font-size: 2.4rem;
+  font-weight: 900;
+  color: var(--flipper-red);
+  margin: 0 0 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.button-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.primary-button,
+.secondary-button {
+  font: inherit;
+  font-weight: 800;
+  font-size: 1rem;
+  border-radius: 12px;
+  padding: 11px 16px;
+  cursor: pointer;
+  flex: 1 1 auto;
+}
+
+.primary-button {
+  background: var(--felt-dark);
+  color: #FFFFFF;
+  border: none;
+}
+
+.primary-button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.secondary-button {
+  background: transparent;
+  color: var(--felt-dark);
+  border: 2px solid var(--felt-dark);
+}
+
+/* Name entry form for the leaderboard */
+.name-form {
+  margin: 4px 0 12px;
+}
+
+.name-form[hidden] { display: none; }
+
+.name-label {
+  display: block;
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin-bottom: 4px;
+}
+
+.name-row {
+  display: flex;
+  gap: 8px;
+}
+
+.name-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 1rem;
+  padding: 10px 12px;
+  border: 2px solid #9DB39F;
+  border-radius: 10px;
+  background: #FFFFFF;
+  color: var(--ink);
+}
+
+.name-input[aria-invalid="true"] {
+  border-color: var(--error);
+}
+
+.name-form .primary-button {
+  flex: 0 0 auto;
+}
+
+.inline-error {
+  color: var(--error);
+  font-size: 0.85rem;
+  margin: 6px 0 0;
+  min-height: 1em;
+}
+
+.inline-status {
+  font-size: 0.85rem;
+  margin: 6px 0 0;
+  color: #4A5A48;
+}
+
+/* Leaderboard table */
+.leaderboard-heading {
+  margin: 12px 0 6px;
+  font-size: 1rem;
+  color: var(--felt-dark);
+}
+
+.leaderboard-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.95rem;
+}
+
+.leaderboard-row {
+  display: grid;
+  grid-template-columns: 1.8rem 1fr auto;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 8px;
+}
+
+.leaderboard-row:nth-child(odd) {
+  background: #F3EAD5;
+}
+
+.leaderboard-row.is-new {
+  background: #F2C84B;
+  font-weight: 800;
+}
+
+.leaderboard-rank {
+  color: #7A6A4A;
+  font-variant-numeric: tabular-nums;
+}
+
+.leaderboard-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leaderboard-score {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.leaderboard-empty {
+  font-size: 0.9rem;
+  color: #6A6A5A;
+  margin: 0;
+}
+
+.leaderboard-note {
+  font-size: 0.8rem;
+  color: #6A6A5A;
+  margin: 6px 0 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sequence-light { transition: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ==========================================================
+     BACKBOARD: title strip echoing the painted sky
+     ========================================================== -->
+<header class="backboard">
+  <svg class="backboard-sun" viewBox="0 0 46 46" aria-hidden="true">
+    <g stroke="#F6D56B" stroke-width="3" stroke-linecap="round">
+      <line x1="23" y1="2" x2="23" y2="8"/><line x1="23" y1="38" x2="23" y2="44"/>
+      <line x1="2" y1="23" x2="8" y2="23"/><line x1="38" y1="23" x2="44" y2="23"/>
+      <line x1="8" y1="8" x2="12" y2="12"/><line x1="34" y1="34" x2="38" y2="38"/>
+      <line x1="8" y1="38" x2="12" y2="34"/><line x1="34" y1="12" x2="38" y2="8"/>
+    </g>
+    <circle cx="23" cy="23" r="10" fill="#FBF3D0"/>
+  </svg>
+  <svg class="backboard-blossoms" viewBox="0 0 90 50" aria-hidden="true">
+    <path d="M88 4 C70 10 60 22 44 26 C34 29 26 38 18 46" stroke="#2B2B2B" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <g fill="#F29CB7">
+      <circle cx="70" cy="18" r="3"/><circle cx="58" cy="28" r="2.6"/><circle cx="48" cy="16" r="2.4"/>
+      <circle cx="38" cy="36" r="2.8"/><circle cx="28" cy="30" r="2.2"/><circle cx="80" cy="30" r="2.4"/>
+      <circle cx="20" cy="40" r="2"/>
+    </g>
+  </svg>
+  <h1 class="game-title">Garden Pinball</h1>
+  <p class="game-credit">Based on Aloka's Unit of Inquiry board</p>
+</header>
+
+<!-- ==========================================================
+     HUD
+     ========================================================== -->
+<div class="hud">
+  <div class="hud-block">
+    <span class="hud-label">Score</span>
+    <span class="hud-value" id="scoreValue">0</span>
+  </div>
+  <div class="sequence-lights" id="sequenceLights" aria-label="Sequence progress">
+    <span class="sequence-light" data-step="0">10</span>
+    <span class="sequence-light" data-step="1">20</span>
+    <span class="sequence-light" data-step="2">30</span>
+    <span class="sequence-light" data-step="3">40</span>
+    <span class="sequence-light" data-step="4">50</span>
+  </div>
+  <div class="hud-block">
+    <span class="hud-label">Ball</span>
+    <span class="hud-value" id="ballValue">1/3</span>
+  </div>
+  <div class="hud-actions">
+    <button class="icon-button" id="pauseButton" type="button" aria-label="Pause" title="Pause">&#9208;&#xFE0E;</button>
+    <button class="icon-button" id="soundButton" type="button" aria-label="Turn sound off" title="Sound on" aria-pressed="true">&#128266;</button>
+    <button class="icon-button" id="leaderboardButton" type="button" aria-label="View leaderboard" title="View leaderboard">&#127942;</button>
+  </div>
+</div>
+
+<!-- ==========================================================
+     STAGE: canvas playfield + overlay panels
+     ========================================================== -->
+<main class="stage" id="stage">
+  <canvas class="board-canvas" id="boardCanvas" aria-label="Pinball playfield"></canvas>
+
+  <div class="overlay" id="overlay">
+
+    <!-- Start panel -->
+    <section class="panel" id="startPanel">
+      <h2 class="panel-heading">The garden needs you</h2>
+      <p class="story-text">A storm has blown litter all over the garden, and your marble is the clean-up helper. Bounce into the rubbish to pick it up, and collect it in order from 10 to 50 for a 500-point clean sweep.</p>
+      <p class="story-text">Be gentle with the mole. This is his home, and if you bump him, all your litter spills and your score drops to zero. Steer clear of the red mushroom too. It's toxic, and every touch costs 50 points.</p>
+      <p class="controls-hint">Tap the left or right side of the board to flip. On a keyboard, use the arrow keys.</p>
+      <button class="primary-button" id="startButton" type="button">Start game</button>
+      <h3 class="leaderboard-heading">Top 10</h3>
+      <ol class="leaderboard-list" id="startLeaderboardList"></ol>
+      <p class="leaderboard-note" id="startLeaderboardNote"></p>
+    </section>
+
+    <!-- Pause panel -->
+    <section class="panel" id="pausePanel" hidden>
+      <h2 class="panel-heading">Paused</h2>
+      <p class="panel-text">The ball is waiting for you.</p>
+      <div class="button-row">
+        <button class="primary-button" id="resumeButton" type="button">Resume</button>
+        <button class="secondary-button" id="restartButton" type="button">Start over</button>
+      </div>
+    </section>
+
+    <!-- Leaderboard panel (opened from the trophy button) -->
+    <section class="panel" id="leaderboardPanel" hidden>
+      <h2 class="panel-heading">Top 10</h2>
+      <ol class="leaderboard-list" id="viewLeaderboardList"></ol>
+      <p class="leaderboard-note" id="viewLeaderboardNote"></p>
+      <div class="button-row">
+        <button class="primary-button" id="leaderboardBackButton" type="button">Back</button>
+      </div>
+    </section>
+
+    <!-- Game over panel -->
+    <section class="panel" id="gameOverPanel" hidden>
+      <h2 class="panel-heading">Game over</h2>
+      <p class="final-score" id="finalScoreValue">0</p>
+      <p class="panel-text" id="gameOverMessage"></p>
+
+      <form class="name-form" id="nameForm" novalidate hidden>
+        <label class="name-label" for="playerNameInput">Your name for the leaderboard</label>
+        <div class="name-row">
+          <input class="name-input" id="playerNameInput" type="text" maxlength="12"
+                 autocomplete="nickname" autocapitalize="words" spellcheck="false"
+                 aria-describedby="nameError">
+          <button class="primary-button" id="saveScoreButton" type="submit">Save score</button>
+        </div>
+        <p class="inline-error" id="nameError" role="alert"></p>
+      </form>
+      <p class="inline-status" id="saveStatus" role="status"></p>
+
+      <h3 class="leaderboard-heading">Top 10</h3>
+      <ol class="leaderboard-list" id="gameOverLeaderboardList"></ol>
+      <p class="leaderboard-note" id="gameOverLeaderboardNote"></p>
+
+      <div class="button-row">
+        <button class="primary-button" id="playAgainButton" type="button">Play again</button>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<script>
+'use strict';
+
+/* ==========================================================
+   CONFIGURATION
+   ========================================================== */
+
+// Google Apps Script web app URL for the shared family leaderboard.
+// Leave empty to keep scores on this device only. The setup guide
+// explains where to get this URL.
+const LEADERBOARD_URL = 'https://script.google.com/macros/s/AKfycbzdbVrCkNM3-wyy6TF7jlTgBbKQ4S1gB--q9Fz78DJdfDcfIBDF3bqz8H_O_bxOBi-8yg/exec';
+
+const LEADERBOARD_SIZE = 10;
+const MAX_NAME_LENGTH = 12;
+const LOCAL_SCORES_KEY = 'gardenPinball.scores.v1';
+const LAST_NAME_KEY = 'gardenPinball.lastName';
+const REQUEST_TIMEOUT_MS = 8000;
+
+// Playfield is designed in a fixed logical space, then scaled to the screen.
+const BOARD_W = 400;
+const BOARD_H = 720;
+
+// Physics tuning. Speeds are in logical pixels per 1/60 s frame.
+const FRAME_MS = 1000 / 60;
+const SUBSTEPS = 8;           // physics steps per frame, prevents tunnelling
+const GRAVITY = 0.22;
+const MAX_SPEED = 20;
+const BALL_R = 9;
+const BALLS_PER_GAME = 3;
+
+// Scoring rules
+const SEQUENCE_BONUS = 500;
+const MUSHROOM_PENALTY = 50;
+
+/* ==========================================================
+   PLAYFIELD GEOMETRY
+   ========================================================== */
+
+const WALL_L = 22;
+const WALL_R = 378;
+const WALL_T = 22;
+const CORNER_R = 56;
+
+// Walls are line segments. "r" is the visual thickness the ball bounces off.
+const walls = [];
+
+function addWall(x1, y1, x2, y2, r) {
+  walls.push({ x1, y1, x2, y2, r: r || 0 });
+}
+
+// Builds a curved corner out of short straight segments.
+function addArc(cx, cy, radius, a0, a1, pieces) {
+  let px = cx + radius * Math.cos(a0);
+  let py = cy + radius * Math.sin(a0);
+  for (let i = 1; i <= pieces; i++) {
+    const a = a0 + (a1 - a0) * (i / pieces);
+    const x = cx + radius * Math.cos(a);
+    const y = cy + radius * Math.sin(a);
+    addWall(px, py, x, y, 0);
+    px = x;
+    py = y;
+  }
+}
+
+addWall(WALL_L, 560, WALL_L, WALL_T + CORNER_R, 0);
+addArc(WALL_L + CORNER_R, WALL_T + CORNER_R, CORNER_R, Math.PI, 1.5 * Math.PI, 8);
+addWall(WALL_L + CORNER_R, WALL_T, WALL_R - CORNER_R, WALL_T, 0);
+addArc(WALL_R - CORNER_R, WALL_T + CORNER_R, CORNER_R, 1.5 * Math.PI, 2 * Math.PI, 8);
+addWall(WALL_R, WALL_T + CORNER_R, WALL_R, 560, 0);
+
+// Inlane guides funnel the ball towards the flippers
+const guides = [
+  { x1: WALL_L, y1: 560, x2: 112, y2: 634, r: 4 },
+  { x1: WALL_R, y1: 560, x2: 288, y2: 634, r: 4 }
+];
+guides.forEach(g => walls.push(g));
+
+// Ball entry point: the tube in the top-right corner.
+// The ball drops straight down a clear lane (x 341-359) with nothing solid in it.
+const ENTRY = { x: 350, y: 44 };
+
+// Numbered targets (Aloka's wooden blocks, now worth 10 to 50)
+function rectSegments(cx, cy, w, h, angle) {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const hw = w / 2;
+  const hh = h / 2;
+  const corners = [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]].map(([x, y]) => ({
+    x: cx + x * c - y * s,
+    y: cy + x * s + y * c
+  }));
+  return corners.map((p, i) => {
+    const q = corners[(i + 1) % 4];
+    return { x1: p.x, y1: p.y, x2: q.x, y2: q.y, r: 0 };
+  });
+}
+
+// Centres are at least 110 units apart and clear of the entry lane
+const targets = [
+  { value: 10, x: 95, y: 95, angle: -0.15 },
+  { value: 20, x: 205, y: 70, angle: 0 },
+  { value: 30, x: 290, y: 145, angle: 0.35 },
+  { value: 40, x: 180, y: 190, angle: -0.3 },
+  { value: 50, x: 90, y: 275, angle: -0.2 }
+].map(t => ({
+  ...t,
+  w: 46,
+  h: 20,
+  lastHit: -1e9,
+  segments: rectSegments(t.x, t.y, 46, 20, t.angle)
+}));
+
+// Potted pine: a solid obstacle, no points
+const pineTree = { x: 250, y: 225, r: 13 };
+
+// Mole holes: the mole pops up in one, the other two are tunnels
+const holes = [
+  { x: 55, y: 170 },   // upper left
+  { x: 80, y: 340 },   // left
+  { x: 225, y: 350 }   // middle right, beside the dark grass
+];
+const HOLE_CAPTURE_DIST = 10;
+
+// Grass zones: dark felt slows the ball more than light felt
+const grassZones = [
+  { x: 256, y: 250, w: 106, h: 210, damping: 0.965, dark: true },
+  { x: 256, y: 482, w: 110, h: 42, damping: 0.985, dark: false },
+  { x: 40, y: 490, w: 110, h: 42, damping: 0.985, dark: false }
+];
+
+// Mushroom drifts left and right across the middle of the board
+const MUSHROOM_Y = 405;
+const MUSHROOM_MIN_X = 60;
+const MUSHROOM_MAX_X = 340;
+const MUSHROOM_SPEED = 0.7;
+// Side-view mushroom: MUSHROOM_Y is the underside of the cap.
+// Collision uses one circle for the cap and one for the stem.
+const MUSHROOM_CAP_R = 14;
+const MUSHROOM_CAP_OFFSET = -7;
+const MUSHROOM_STEM_R = 7;
+const MUSHROOM_STEM_OFFSET = 14;
+
+// Flippers
+const FLIPPER_LEN = 68;
+const FLIPPER_R = 7;
+const FLIPPER_REST = 0.52;     // radians below horizontal
+const FLIPPER_UP = -0.45;      // radians above horizontal
+const FLIPPER_UP_SPEED = 0.35; // radians per frame
+const FLIPPER_DOWN_SPEED = 0.2;
+
+function makeFlipper(px, py, side) {
+  return { px, py, side, angle: FLIPPER_REST, tipX: 0, tipY: 0, prevTipX: 0, prevTipY: 0 };
+}
+
+const flippers = {
+  left: makeFlipper(118, 638, 'left'),
+  right: makeFlipper(282, 638, 'right')
+};
+
+/* ==========================================================
+   GAME STATE
+   ========================================================== */
+
+const game = {
+  state: 'menu',        // menu | playing | paused | over
+  score: 0,
+  ballNumber: 1,
+  sequenceStep: 0,      // how many of 10..50 have been hit in order
+  clock: 0,             // game time in ms, frozen while paused
+  serveAt: -1,          // clock time to serve the next ball
+  endAt: -1,            // clock time to show game over
+  runId: 0              // guards async leaderboard work between games
+};
+
+const ball = {
+  x: 0, y: 0, vx: 0, vy: 0,
+  active: false,
+  hidden: false,        // true while travelling through a mole tunnel
+  reappearAt: 0,
+  destHole: -1,
+  holeImmuneUntil: 0,
+  slowFrames: 0
+};
+
+const mole = {
+  hole: 0,
+  pop: 0,               // 0 = hidden, 1 = fully up
+  phase: 'rising',      // rising | up | down
+  nextMoveAt: 0,
+  hitCooldownUntil: 0,
+  laughUntil: 0
+};
+
+const mushroom = { x: 200, dir: 1, hitCooldownUntil: 0 };
+
+const popups = [];      // floating score text
+let banner = null;      // centred message on the board
+
+/* ==========================================================
+   DOM REFERENCES
+   ========================================================== */
+
+const stage = document.getElementById('stage');
+const canvas = document.getElementById('boardCanvas');
+const ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlay');
+const startPanel = document.getElementById('startPanel');
+const pausePanel = document.getElementById('pausePanel');
+const gameOverPanel = document.getElementById('gameOverPanel');
+const scoreValue = document.getElementById('scoreValue');
+const ballValue = document.getElementById('ballValue');
+const sequenceLights = Array.from(document.querySelectorAll('.sequence-light'));
+const pauseButton = document.getElementById('pauseButton');
+const soundButton = document.getElementById('soundButton');
+const leaderboardButton = document.getElementById('leaderboardButton');
+const leaderboardPanel = document.getElementById('leaderboardPanel');
+const viewLeaderboardList = document.getElementById('viewLeaderboardList');
+const viewLeaderboardNote = document.getElementById('viewLeaderboardNote');
+const leaderboardBackButton = document.getElementById('leaderboardBackButton');
+const startButton = document.getElementById('startButton');
+const resumeButton = document.getElementById('resumeButton');
+const restartButton = document.getElementById('restartButton');
+const playAgainButton = document.getElementById('playAgainButton');
+const finalScoreValue = document.getElementById('finalScoreValue');
+const gameOverMessage = document.getElementById('gameOverMessage');
+const nameForm = document.getElementById('nameForm');
+const playerNameInput = document.getElementById('playerNameInput');
+const nameError = document.getElementById('nameError');
+const saveScoreButton = document.getElementById('saveScoreButton');
+const saveStatus = document.getElementById('saveStatus');
+const startLeaderboardList = document.getElementById('startLeaderboardList');
+const startLeaderboardNote = document.getElementById('startLeaderboardNote');
+const gameOverLeaderboardList = document.getElementById('gameOverLeaderboardList');
+const gameOverLeaderboardNote = document.getElementById('gameOverLeaderboardNote');
+
+/* ==========================================================
+   CANVAS SIZING
+   The board keeps its proportions and scales to fit the stage.
+   A static layer holds everything that never moves.
+   ========================================================== */
+
+const view = { scale: 1, dpr: 1 };
+let staticLayer = null;
+
+function resizeBoard() {
+  const styles = getComputedStyle(stage);
+  const padX = parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight);
+  const padY = parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom);
+  const availW = Math.max(100, stage.clientWidth - padX);
+  const availH = Math.max(100, stage.clientHeight - padY);
+  view.scale = Math.min(availW / BOARD_W, availH / BOARD_H);
+  view.dpr = Math.min(window.devicePixelRatio || 1, 3);
+
+  const cssW = Math.floor(BOARD_W * view.scale);
+  const cssH = Math.floor(BOARD_H * view.scale);
+  canvas.style.width = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+  canvas.width = Math.round(cssW * view.dpr);
+  canvas.height = Math.round(cssH * view.dpr);
+
+  staticLayer = document.createElement('canvas');
+  staticLayer.width = canvas.width;
+  staticLayer.height = canvas.height;
+  const g = staticLayer.getContext('2d');
+  g.setTransform(view.scale * view.dpr, 0, 0, view.scale * view.dpr, 0, 0);
+  drawStaticLayer(g);
+}
+
+/* ==========================================================
+   DRAWING HELPERS
+   ========================================================== */
+
+// Seeded random numbers so painted details look the same every time
+function seededRandom(seed) {
+  let s = seed % 2147483647;
+  if (s <= 0) s += 2147483646;
+  return () => (s = (s * 16807) % 2147483647) / 2147483647;
+}
+
+function roundedRectPath(g, x, y, w, h, r) {
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.lineTo(x + w - r, y);
+  g.quadraticCurveTo(x + w, y, x + w, y + r);
+  g.lineTo(x + w, y + h - r);
+  g.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  g.lineTo(x + r, y + h);
+  g.quadraticCurveTo(x, y + h, x, y + h - r);
+  g.lineTo(x, y + r);
+  g.quadraticCurveTo(x, y, x + r, y);
+  g.closePath();
+}
+
+// The inside shape of the playfield (used for clipping the plywood)
+function playfieldPath(g) {
+  g.beginPath();
+  g.moveTo(WALL_L, BOARD_H);
+  g.lineTo(WALL_L, WALL_T + CORNER_R);
+  g.arc(WALL_L + CORNER_R, WALL_T + CORNER_R, CORNER_R, Math.PI, 1.5 * Math.PI);
+  g.lineTo(WALL_R - CORNER_R, WALL_T);
+  g.arc(WALL_R - CORNER_R, WALL_T + CORNER_R, CORNER_R, 1.5 * Math.PI, 2 * Math.PI);
+  g.lineTo(WALL_R, BOARD_H);
+  g.closePath();
+}
+
+function drawPebble(g, x, y, r, colour, rand) {
+  g.save();
+  g.translate(x, y);
+  g.rotate(rand() * Math.PI);
+  g.fillStyle = colour;
+  g.beginPath();
+  g.ellipse(0, 0, r * 1.15, r * 0.85, 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = 'rgba(255,255,255,0.35)';
+  g.beginPath();
+  g.ellipse(-r * 0.35, -r * 0.3, r * 0.35, r * 0.22, 0, 0, Math.PI * 2);
+  g.fill();
+  g.restore();
+}
+
+/* ==========================================================
+   STATIC LAYER — plywood, paintings, felt, decorations
+   ========================================================== */
+
+function drawStaticLayer(g) {
+  const rand = seededRandom(20260920);
+
+  // Wooden rails around the board
+  g.fillStyle = '#C99A5B';
+  g.fillRect(0, 0, BOARD_W, BOARD_H);
+  g.fillStyle = 'rgba(0,0,0,0.08)';
+  for (let i = 0; i < 40; i++) {
+    g.fillRect(0, rand() * BOARD_H, BOARD_W, 1);
+  }
+
+  // Plywood floor
+  g.save();
+  playfieldPath(g);
+  g.clip();
+  const ply = g.createLinearGradient(0, 0, 0, BOARD_H);
+  ply.addColorStop(0, '#F1DDB4');
+  ply.addColorStop(1, '#E3C895');
+  g.fillStyle = ply;
+  g.fillRect(0, 0, BOARD_W, BOARD_H);
+
+  // Wood grain
+  g.strokeStyle = 'rgba(160,120,60,0.12)';
+  g.lineWidth = 1;
+  for (let i = 0; i < 26; i++) {
+    const y0 = rand() * BOARD_H;
+    g.beginPath();
+    g.moveTo(0, y0);
+    g.bezierCurveTo(130, y0 + rand() * 16 - 8, 270, y0 + rand() * 16 - 8, BOARD_W, y0 + rand() * 10 - 5);
+    g.stroke();
+  }
+
+  // Yellow dot sprinkles (Aboriginal-style dotting on Aloka's board)
+  for (let i = 0; i < 170; i++) {
+    const x = 40 + rand() * 320;
+    const y = 340 + rand() * 210;
+    g.fillStyle = rand() > 0.5 ? 'rgba(236,190,70,0.75)' : 'rgba(240,170,60,0.6)';
+    g.beginPath();
+    g.arc(x, y, 1.6 + rand() * 1.2, 0, Math.PI * 2);
+    g.fill();
+  }
+
+  // Painted vine with flowers
+  g.lineCap = 'round';
+  g.strokeStyle = '#7CC56A';
+  g.lineWidth = 3;
+  g.beginPath();
+  g.moveTo(44, 470);
+  g.bezierCurveTo(100, 440, 170, 430, 232, 468);
+  g.stroke();
+  g.strokeStyle = '#2B2B2B';
+  g.lineWidth = 1.6;
+  g.beginPath();
+  g.moveTo(50, 500);
+  g.bezierCurveTo(110, 470, 140, 450, 220, 440);
+  g.stroke();
+  [[62, 478, '#E8574A'], [122, 492, '#F07E6E'], [214, 432, '#F07E6E']].forEach(([x, y, c]) => {
+    g.fillStyle = c;
+    for (let p = 0; p < 5; p++) {
+      const a = (p / 5) * Math.PI * 2;
+      g.beginPath();
+      g.arc(x + Math.cos(a) * 4, y + Math.sin(a) * 4, 3.4, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.fillStyle = '#F6D56B';
+    g.beginPath();
+    g.arc(x, y, 2.4, 0, Math.PI * 2);
+    g.fill();
+  });
+
+  // Painted hills behind the flippers
+  g.fillStyle = '#8DC96C';
+  g.beginPath();
+  g.moveTo(0, 600);
+  g.quadraticCurveTo(90, 540, 180, 585);
+  g.quadraticCurveTo(270, 530, BOARD_W, 590);
+  g.lineTo(BOARD_W, 660);
+  g.lineTo(0, 660);
+  g.closePath();
+  g.fill();
+  g.fillStyle = '#3F9A60';
+  g.beginPath();
+  g.moveTo(0, 625);
+  g.quadraticCurveTo(120, 585, 230, 620);
+  g.quadraticCurveTo(320, 600, BOARD_W, 630);
+  g.lineTo(BOARD_W, 660);
+  g.lineTo(0, 660);
+  g.closePath();
+  g.fill();
+  // The painted tree on the hill
+  g.fillStyle = '#2F7A5E';
+  g.beginPath();
+  g.ellipse(196, 566, 14, 18, 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#5B3A22';
+  g.fillRect(193, 580, 6, 14);
+  // White stones in the hills
+  g.fillStyle = 'rgba(255,255,255,0.85)';
+  [[60, 628, 14, 7], [300, 624, 16, 8], [150, 640, 10, 5]].forEach(([x, y, rx, ry]) => {
+    g.beginPath();
+    g.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+    g.fill();
+  });
+
+  // Sand and river: the drain at the bottom
+  g.fillStyle = '#E8B84A';
+  g.beginPath();
+  g.moveTo(0, 660);
+  g.quadraticCurveTo(100, 648, 200, 662);
+  g.quadraticCurveTo(300, 674, BOARD_W, 656);
+  g.lineTo(BOARD_W, 690);
+  g.lineTo(0, 690);
+  g.closePath();
+  g.fill();
+  g.fillStyle = '#76B9DA';
+  g.beginPath();
+  g.moveTo(0, 684);
+  g.quadraticCurveTo(120, 674, 210, 688);
+  g.quadraticCurveTo(300, 698, BOARD_W, 682);
+  g.lineTo(BOARD_W, BOARD_H);
+  g.lineTo(0, BOARD_H);
+  g.closePath();
+  g.fill();
+  g.strokeStyle = 'rgba(255,255,255,0.5)';
+  g.lineWidth = 1.5;
+  for (let i = 0; i < 7; i++) {
+    const x = 30 + rand() * 330;
+    const y = 698 + rand() * 16;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.quadraticCurveTo(x + 8, y - 3, x + 16, y);
+    g.stroke();
+  }
+
+  // Felt grass zones with a fuzzy texture
+  grassZones.forEach(z => {
+    g.fillStyle = z.dark ? '#1E5B36' : '#5F9434';
+    roundedRectPath(g, z.x, z.y, z.w, z.h, 4);
+    g.fill();
+    const count = Math.floor((z.w * z.h) / 18);
+    for (let i = 0; i < count; i++) {
+      g.fillStyle = rand() > 0.5 ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)';
+      g.fillRect(z.x + rand() * z.w, z.y + rand() * z.h, 1.4, 1.4);
+    }
+    // Little pink pins, as on the real felt
+    g.fillStyle = '#F4B6C8';
+    g.beginPath();
+    g.arc(z.x + z.w - 12, z.y + 12, 2.2, 0, Math.PI * 2);
+    g.fill();
+  });
+
+  // Big leaf on the dark grass
+  g.save();
+  g.translate(300, 300);
+  g.rotate(-0.6);
+  const leaf = g.createLinearGradient(-26, 0, 26, 0);
+  leaf.addColorStop(0, '#1F4A2A');
+  leaf.addColorStop(1, '#3D7A45');
+  g.fillStyle = leaf;
+  g.beginPath();
+  g.ellipse(0, 0, 30, 11, 0, 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = 'rgba(255,255,255,0.25)';
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(-28, 0);
+  g.lineTo(28, 0);
+  g.stroke();
+  g.restore();
+
+  // Decorative bird's nest with a ring of purple pebbles
+  const nest = { x: 300, y: 215 };
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2;
+    drawPebble(g, nest.x + Math.cos(a) * 21, nest.y + Math.sin(a) * 17, 4.2, '#7E3FA6', rand);
+  }
+  g.strokeStyle = '#A89478';
+  g.lineWidth = 1;
+  for (let i = 0; i < 70; i++) {
+    const a = rand() * Math.PI * 2;
+    const r = 3 + rand() * 12;
+    g.beginPath();
+    g.arc(nest.x + Math.cos(a) * r * 0.3, nest.y + Math.sin(a) * r * 0.3, r, a, a + 0.9 + rand());
+    g.stroke();
+  }
+
+  // Decorative cork post with a red cross
+  g.fillStyle = '#C7A06A';
+  g.beginPath();
+  g.arc(150, 42, 10, 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = '#8C6A3E';
+  g.lineWidth = 1.5;
+  g.stroke();
+  g.strokeStyle = '#C8362D';
+  g.lineWidth = 2.5;
+  g.beginPath();
+  g.moveTo(150, 35); g.lineTo(150, 49);
+  g.moveTo(144, 41); g.lineTo(156, 41);
+  g.stroke();
+
+  // Entry tube in the top-right corner, where the ball drops in
+  g.fillStyle = '#CDB08A';
+  g.beginPath();
+  g.ellipse(ENTRY.x + 4, ENTRY.y - 4, 17, 13, -0.4, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#5C4630';
+  g.beginPath();
+  g.ellipse(ENTRY.x + 4, ENTRY.y - 4, 11, 8, -0.4, 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = '#FFFFFF';
+  g.lineWidth = 1.5;
+  g.beginPath();
+  g.ellipse(ENTRY.x + 4, ENTRY.y - 4, 15, 11, -0.4, 0, Math.PI * 2);
+  g.stroke();
+
+  // Potted pine tree (solid obstacle)
+  g.fillStyle = '#8B5A2B';
+  g.beginPath();
+  g.arc(pineTree.x, pineTree.y, pineTree.r, 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = '#2E7D46';
+  g.lineWidth = 2.2;
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2;
+    g.beginPath();
+    g.moveTo(pineTree.x, pineTree.y);
+    g.lineTo(pineTree.x + Math.cos(a) * 12, pineTree.y + Math.sin(a) * 12);
+    g.stroke();
+  }
+  g.fillStyle = '#3E9A56';
+  g.beginPath();
+  g.arc(pineTree.x, pineTree.y, 4, 0, Math.PI * 2);
+  g.fill();
+
+  g.restore(); // end plywood clip
+
+  // Rail edge line
+  g.strokeStyle = '#9C7340';
+  g.lineWidth = 2;
+  playfieldPath(g);
+  g.stroke();
+
+  // Purple and gold pebbles along the rails
+  const pebbleColours = ['#7E3FA6', '#C9A443'];
+  for (let y = 96, i = 0; y < 560; y += 22, i++) {
+    drawPebble(g, 11, y, 6, pebbleColours[i % 2], rand);
+    drawPebble(g, BOARD_W - 11, y + 11, 6, pebbleColours[(i + 1) % 2], rand);
+  }
+  for (let x = 90, i = 0; x < 320; x += 24, i++) {
+    drawPebble(g, x, 11, 5.5, pebbleColours[i % 2], rand);
+  }
+
+  // Inlane guides drawn as wooden rails
+  g.lineCap = 'round';
+  guides.forEach(s => {
+    g.strokeStyle = '#A87843';
+    g.lineWidth = s.r * 2;
+    g.beginPath();
+    g.moveTo(s.x1, s.y1);
+    g.lineTo(s.x2, s.y2);
+    g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,0.25)';
+    g.lineWidth = 1.5;
+    g.beginPath();
+    g.moveTo(s.x1, s.y1 - 2);
+    g.lineTo(s.x2, s.y2 - 2);
+    g.stroke();
+  });
+}
+
+/* ==========================================================
+   DYNAMIC DRAWING — things that move or change each frame
+   ========================================================== */
+
+function drawHoles(g) {
+  holes.forEach(h => {
+    g.fillStyle = '#8A6A45';
+    g.beginPath();
+    g.ellipse(h.x, h.y, 18, 15, 0, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#2A1C10';
+    g.beginPath();
+    g.ellipse(h.x, h.y, 12, 10, 0, 0, Math.PI * 2);
+    g.fill();
+  });
+}
+
+function drawTargets(g) {
+  targets.forEach((t, i) => {
+    const lit = i < game.sequenceStep;
+    const flash = Math.max(0, 1 - (game.clock - t.lastHit) / 250);
+    g.save();
+    g.translate(t.x, t.y);
+    g.rotate(t.angle);
+    roundedRectPath(g, -t.w / 2, -t.h / 2, t.w, t.h, 4);
+    g.fillStyle = lit ? '#F2C84B' : '#D9B47E';
+    g.fill();
+    g.strokeStyle = lit ? '#A67C12' : '#9C7340';
+    g.lineWidth = 1.5;
+    g.stroke();
+    if (flash > 0) {
+      g.fillStyle = `rgba(255,255,255,${0.7 * flash})`;
+      g.fill();
+    }
+    g.fillStyle = '#2B2014';
+    g.font = 'bold 13px ' + getComputedStyle(document.body).fontFamily;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(String(t.value), 0, 1);
+    g.restore();
+  });
+}
+
+function drawMushroom(g) {
+  const x = mushroom.x;
+  const y = MUSHROOM_Y; // underside of the cap
+
+  // Shadow on the plywood
+  g.fillStyle = 'rgba(0,0,0,0.18)';
+  g.beginPath();
+  g.ellipse(x + 3, y + 24, 14, 4, 0, 0, Math.PI * 2);
+  g.fill();
+
+  // Stem
+  roundedRectPath(g, x - 6, y - 2, 12, 26, 5);
+  g.fillStyle = '#F3E6CC';
+  g.fill();
+  g.strokeStyle = '#B9A27A';
+  g.lineWidth = 1.2;
+  g.stroke();
+
+  // Dark gill fringe under the cap, as on Aloka's backboard
+  g.fillStyle = '#3A1512';
+  g.beginPath();
+  g.ellipse(x, y, 19, 4, 0, 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = '#F3E6CC';
+  g.lineWidth = 1;
+  for (let i = -3; i <= 3; i++) {
+    g.beginPath();
+    g.moveTo(x + i * 5, y - 1);
+    g.lineTo(x + i * 5, y + 2.5);
+    g.stroke();
+  }
+
+  // Red domed cap
+  g.fillStyle = '#C8362D';
+  g.beginPath();
+  g.ellipse(x, y - 1, 20, 17, 0, Math.PI, 2 * Math.PI);
+  g.closePath();
+  g.fill();
+  g.strokeStyle = '#8E2019';
+  g.lineWidth = 1.5;
+  g.stroke();
+
+  // White spots
+  g.fillStyle = '#FFF4E4';
+  [[-10, -7, 3], [1, -12, 3.2], [11, -6, 2.4], [-2, -4, 2]].forEach(([dx, dy, r]) => {
+    g.beginPath();
+    g.arc(x + dx, y + dy, r, 0, Math.PI * 2);
+    g.fill();
+  });
+}
+
+function drawMole(g) {
+  if (mole.pop <= 0.02) return;
+  const h = holes[mole.hole];
+  const p = mole.pop;
+  const cx = h.x;
+  const cy = h.y - 4 * p;
+  const r = 15 * p;
+  const laughing = game.clock < mole.laughUntil;
+
+  g.fillStyle = '#7A5230';
+  g.beginPath();
+  g.arc(cx, cy, r, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#A57A52';
+  g.beginPath();
+  g.ellipse(cx, cy + r * 0.3, r * 0.6, r * 0.45, 0, 0, Math.PI * 2);
+  g.fill();
+
+  // Sleepy eyes, like the face on Aloka's mole
+  g.strokeStyle = '#1D120A';
+  g.lineWidth = 1.6 * p;
+  g.beginPath();
+  g.arc(cx - r * 0.38, cy - r * 0.2, r * 0.18, laughing ? Math.PI : 0, laughing ? 0 : Math.PI, laughing);
+  g.stroke();
+  g.beginPath();
+  g.arc(cx + r * 0.38, cy - r * 0.2, r * 0.18, laughing ? Math.PI : 0, laughing ? 0 : Math.PI, laughing);
+  g.stroke();
+
+  g.fillStyle = '#F29CB7';
+  g.beginPath();
+  g.arc(cx, cy + r * 0.12, r * 0.18, 0, Math.PI * 2);
+  g.fill();
+
+  if (laughing) {
+    g.fillStyle = '#3A1512';
+    g.beginPath();
+    g.arc(cx, cy + r * 0.42, r * 0.22, 0, Math.PI);
+    g.fill();
+  }
+
+  g.strokeStyle = 'rgba(29,18,10,0.6)';
+  g.lineWidth = 0.8;
+  [-1, 1].forEach(side => {
+    g.beginPath();
+    g.moveTo(cx + side * r * 0.25, cy + r * 0.2);
+    g.lineTo(cx + side * r * 0.85, cy + r * 0.1);
+    g.moveTo(cx + side * r * 0.25, cy + r * 0.28);
+    g.lineTo(cx + side * r * 0.85, cy + r * 0.35);
+    g.stroke();
+  });
+}
+
+function drawFlipper(g, f) {
+  const dx = f.tipX - f.px;
+  const dy = f.tipY - f.py;
+  const len = Math.hypot(dx, dy);
+  const nx = -dy / len;
+  const ny = dx / len;
+  const r0 = FLIPPER_R + 1.5;
+  const r1 = FLIPPER_R - 2;
+
+  g.fillStyle = '#C8362D';
+  g.beginPath();
+  g.moveTo(f.px + nx * r0, f.py + ny * r0);
+  g.lineTo(f.tipX + nx * r1, f.tipY + ny * r1);
+  g.arc(f.tipX, f.tipY, r1, Math.atan2(ny, nx), Math.atan2(-ny, -nx));
+  g.lineTo(f.px - nx * r0, f.py - ny * r0);
+  g.arc(f.px, f.py, r0, Math.atan2(-ny, -nx), Math.atan2(ny, nx));
+  g.closePath();
+  g.fill();
+  g.strokeStyle = '#8E2019';
+  g.lineWidth = 1.5;
+  g.stroke();
+
+  // Black dots along the flipper, as painted on the original
+  g.fillStyle = '#2B1A17';
+  for (let i = 1; i <= 5; i++) {
+    const t = i / 6.2;
+    g.beginPath();
+    g.arc(f.px + dx * t, f.py + dy * t, 1.3, 0, Math.PI * 2);
+    g.fill();
+  }
+
+  // Pivot peg
+  g.fillStyle = '#F1E4CF';
+  g.beginPath();
+  g.arc(f.px, f.py, 3.2, 0, Math.PI * 2);
+  g.fill();
+}
+
+function drawBall(g) {
+  if (!ball.active || ball.hidden) return;
+  const grad = g.createRadialGradient(ball.x - 3, ball.y - 3, 1, ball.x, ball.y, BALL_R);
+  grad.addColorStop(0, '#E8FFE8');
+  grad.addColorStop(0.35, '#7FD08A');
+  grad.addColorStop(1, '#2F7A43');
+  g.fillStyle = grad;
+  g.beginPath();
+  g.arc(ball.x, ball.y, BALL_R, 0, Math.PI * 2);
+  g.fill();
+}
+
+function drawPopups(g) {
+  const font = getComputedStyle(document.body).fontFamily;
+  popups.forEach(p => {
+    const age = (game.clock - p.born) / p.life;
+    g.globalAlpha = Math.max(0, 1 - age);
+    g.fillStyle = p.colour;
+    g.strokeStyle = 'rgba(255,255,255,0.9)';
+    g.lineWidth = 3;
+    g.font = 'bold 15px ' + font;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    const y = p.y - age * 30;
+    g.strokeText(p.text, p.x, y);
+    g.fillText(p.text, p.x, y);
+  });
+  g.globalAlpha = 1;
+}
+
+function drawBanner(g) {
+  if (!banner || game.clock > banner.until) return;
+  const font = getComputedStyle(document.body).fontFamily;
+  g.font = 'bold 17px ' + font;
+  let w = g.measureText(banner.text).width;
+  if (banner.sub) {
+    g.font = 'bold 13px ' + font;
+    w = Math.max(w, g.measureText(banner.sub).width);
+  }
+  w = Math.min(340, w + 32);
+  const h = banner.sub ? 58 : 40;
+  const x = (BOARD_W - w) / 2;
+  const y = 300;
+  roundedRectPath(g, x, y, w, h, 12);
+  g.fillStyle = banner.colour;
+  g.fill();
+  g.fillStyle = '#FFFFFF';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.font = 'bold 17px ' + font;
+  g.fillText(banner.text, BOARD_W / 2, y + 21, 320);
+  if (banner.sub) {
+    g.font = 'bold 13px ' + font;
+    g.fillText(banner.sub, BOARD_W / 2, y + 42, 320);
+  }
+}
+
+function render() {
+  const s = view.scale * view.dpr;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (staticLayer) ctx.drawImage(staticLayer, 0, 0);
+  ctx.setTransform(s, 0, 0, s, 0, 0);
+  drawHoles(ctx);
+  drawTargets(ctx);
+  drawMushroom(ctx);
+  drawMole(ctx);
+  drawFlipper(ctx, flippers.left);
+  drawFlipper(ctx, flippers.right);
+  drawBall(ctx);
+  drawPopups(ctx);
+  drawBanner(ctx);
+}
+
+/* ==========================================================
+   PHYSICS — collisions
+   ========================================================== */
+
+// Ball against a fixed line segment. Returns the impact speed, or -1 if no contact.
+function collideSegment(s, restitution) {
+  const dx = s.x2 - s.x1;
+  const dy = s.y2 - s.y1;
+  const len2 = dx * dx + dy * dy;
+  let t = ((ball.x - s.x1) * dx + (ball.y - s.y1) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  const px = s.x1 + t * dx;
+  const py = s.y1 + t * dy;
+  let nx = ball.x - px;
+  let ny = ball.y - py;
+  const d = Math.hypot(nx, ny);
+  const minDist = BALL_R + s.r;
+  if (d >= minDist) return -1;
+  if (d < 1e-6) {
+    const l = Math.sqrt(len2);
+    nx = -dy / l;
+    ny = dx / l;
+  } else {
+    nx /= d;
+    ny /= d;
+  }
+  ball.x = px + nx * minDist;
+  ball.y = py + ny * minDist;
+  const vn = ball.vx * nx + ball.vy * ny;
+  if (vn < 0) {
+    ball.vx -= (1 + restitution) * vn * nx;
+    ball.vy -= (1 + restitution) * vn * ny;
+    return -vn;
+  }
+  return 0;
+}
+
+// Ball against a circle that may be moving (vfx, vfy). Returns true on contact.
+function collideCircle(cx, cy, r, restitution, vfx, vfy) {
+  let nx = ball.x - cx;
+  let ny = ball.y - cy;
+  const d = Math.hypot(nx, ny);
+  const minDist = BALL_R + r;
+  if (d >= minDist) return false;
+  if (d < 1e-6) { nx = 0; ny = -1; } else { nx /= d; ny /= d; }
+  ball.x = cx + nx * minDist;
+  ball.y = cy + ny * minDist;
+  const vn = (ball.vx - vfx) * nx + (ball.vy - vfy) * ny;
+  if (vn < 0) {
+    ball.vx -= (1 + restitution) * vn * nx;
+    ball.vy -= (1 + restitution) * vn * ny;
+  }
+  return true;
+}
+
+// Ball against a flipper. The flipper's speed at the contact point is found
+// from where that point was one substep ago, so a swinging flipper launches the ball.
+function collideFlipper(f) {
+  const dx = f.tipX - f.px;
+  const dy = f.tipY - f.py;
+  const len2 = dx * dx + dy * dy;
+  let t = ((ball.x - f.px) * dx + (ball.y - f.py) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  const cx = f.px + t * dx;
+  const cy = f.py + t * dy;
+  const prevCx = f.px + t * (f.prevTipX - f.px);
+  const prevCy = f.py + t * (f.prevTipY - f.py);
+  const vfx = (cx - prevCx) * SUBSTEPS;
+  const vfy = (cy - prevCy) * SUBSTEPS;
+
+  let nx = ball.x - cx;
+  let ny = ball.y - cy;
+  const d = Math.hypot(nx, ny);
+  const minDist = BALL_R + FLIPPER_R;
+  if (d >= minDist) return;
+  if (d < 1e-6) { nx = 0; ny = -1; } else { nx /= d; ny /= d; }
+  ball.x = cx + nx * minDist;
+  ball.y = cy + ny * minDist;
+  const vn = (ball.vx - vfx) * nx + (ball.vy - vfy) * ny;
+  if (vn < 0) {
+    ball.vx -= 1.3 * vn * nx;
+    ball.vy -= 1.3 * vn * ny;
+  }
+}
+
+/* ==========================================================
+   INPUT — touch halves of the board, or keyboard
+   ========================================================== */
+
+const input = { keyLeft: false, keyRight: false, pointers: new Map() };
+
+function isFlipperActive(side) {
+  if (side === 'left' && input.keyLeft) return true;
+  if (side === 'right' && input.keyRight) return true;
+  for (const s of input.pointers.values()) {
+    if (s === side) return true;
+  }
+  return false;
+}
+
+stage.addEventListener('pointerdown', e => {
+  if (game.state !== 'playing' || overlay.contains(e.target)) return;
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const side = e.clientX < rect.left + rect.width / 2 ? 'left' : 'right';
+  input.pointers.set(e.pointerId, side);
+});
+
+['pointerup', 'pointercancel', 'pointerleave'].forEach(type => {
+  stage.addEventListener(type, e => input.pointers.delete(e.pointerId));
+});
+
+document.addEventListener('keydown', e => {
+  if (e.target === playerNameInput) return; // typing a name, not playing
+  const key = e.key;
+  if (key === 'ArrowLeft' || key === 'z' || key === 'Z') {
+    input.keyLeft = true;
+    e.preventDefault();
+  } else if (key === 'ArrowRight' || key === '/' || key === 'm' || key === 'M') {
+    input.keyRight = true;
+    e.preventDefault();
+  } else if ((key === 'p' || key === 'P' || key === 'Escape') && (game.state === 'playing' || game.state === 'paused')) {
+    togglePause();
+  }
+});
+
+document.addEventListener('keyup', e => {
+  const key = e.key;
+  if (key === 'ArrowLeft' || key === 'z' || key === 'Z') input.keyLeft = false;
+  if (key === 'ArrowRight' || key === '/' || key === 'm' || key === 'M') input.keyRight = false;
+});
+
+function clearInput() {
+  input.keyLeft = false;
+  input.keyRight = false;
+  input.pointers.clear();
+}
+
+/* ==========================================================
+   GAME RULES — scoring, mole, mushroom, tunnels
+   ========================================================== */
+
+function addPopup(x, y, text, colour) {
+  popups.push({ x, y, text, colour, born: game.clock, life: 900 });
+}
+
+// sub is an optional second, smaller line
+function showBanner(text, colour, durationMs, sub) {
+  banner = { text, sub: sub || '', colour, until: game.clock + durationMs };
+}
+
+function addScore(points) {
+  game.score = Math.max(0, game.score + points);
+}
+
+// Hitting targets 10..50 in order earns the bonus. A wrong target restarts
+// the sequence (or counts as the first step if it was the 10).
+function hitTarget(index) {
+  const t = targets[index];
+  if (game.clock - t.lastHit < 300) return; // one score per contact
+  t.lastHit = game.clock;
+  addScore(t.value);
+  addPopup(t.x, t.y - 18, '+' + t.value, '#1E5B36');
+  playSound('target', index);
+
+  if (index === game.sequenceStep) {
+    game.sequenceStep++;
+    if (game.sequenceStep === targets.length) {
+      addScore(SEQUENCE_BONUS);
+      showBanner('Clean sweep! +' + SEQUENCE_BONUS, '#1E5B36', 1600);
+      playSound('cleanSweep');
+      game.sequenceStep = 0;
+    }
+  } else {
+    game.sequenceStep = index === 0 ? 1 : 0;
+  }
+}
+
+function hitMole() {
+  if (game.clock < mole.hitCooldownUntil) return;
+  mole.hitCooldownUntil = game.clock + 800;
+  mole.laughUntil = game.clock + 1200;
+  game.score = 0;
+  showBanner('You bumped the mole!', '#7A5230', 1800, 'Your litter spilled \u2014 score back to 0');
+  playSound('mole');
+}
+
+function hitMushroom() {
+  if (game.clock < mushroom.hitCooldownUntil) return;
+  mushroom.hitCooldownUntil = game.clock + 600;
+  addScore(-MUSHROOM_PENALTY);
+  addPopup(mushroom.x, MUSHROOM_Y - 30, 'Poisoned! \u2212' + MUSHROOM_PENALTY, '#C8362D');
+  playSound('mushroom');
+}
+
+// Moves the mole: sink, pick a new hole, rise again.
+function updateMole(dtMs) {
+  if (mole.phase === 'up' && game.clock >= mole.nextMoveAt) {
+    mole.phase = 'down';
+  }
+  if (mole.phase === 'down') {
+    mole.pop -= dtMs / 200;
+    if (mole.pop <= 0) {
+      mole.pop = 0;
+      // Avoid the tunnel exit the ball is heading to, and any hole the ball is on
+      const choices = holes
+        .map((h, i) => i)
+        .filter(i => i !== mole.hole && i !== ball.destHole)
+        .filter(i => !ball.active || ball.hidden || Math.hypot(ball.x - holes[i].x, ball.y - holes[i].y) > 40);
+      if (choices.length > 0) {
+        mole.hole = choices[Math.floor(Math.random() * choices.length)];
+      }
+      mole.phase = 'rising';
+    }
+  }
+  if (mole.phase === 'rising') {
+    mole.pop += dtMs / 250;
+    if (mole.pop >= 1) {
+      mole.pop = 1;
+      mole.phase = 'up';
+      mole.nextMoveAt = game.clock + 4000 + Math.random() * 2000;
+    }
+  }
+}
+
+// Ball drops into a free hole and travels to the other free hole.
+function checkHoles() {
+  if (ball.hidden || game.clock < ball.holeImmuneUntil) return;
+  for (let i = 0; i < holes.length; i++) {
+    if (i === mole.hole) continue;
+    const h = holes[i];
+    if (Math.hypot(ball.x - h.x, ball.y - h.y) < HOLE_CAPTURE_DIST) {
+      const dest = holes.findIndex((_, j) => j !== i && j !== mole.hole);
+      if (dest === -1) return;
+      ball.hidden = true;
+      ball.vx = 0;
+      ball.vy = 0;
+      ball.destHole = dest;
+      ball.reappearAt = game.clock + 450;
+      addPopup(h.x, h.y - 20, 'Whoosh!', '#5C4630');
+      playSound('tunnelIn');
+      return;
+    }
+  }
+}
+
+function releaseFromTunnel() {
+  const h = holes[ball.destHole];
+  ball.x = h.x;
+  ball.y = h.y;
+  ball.vx = (Math.random() * 2 - 1) * 4;
+  ball.vy = -(3 + Math.random() * 2);
+  ball.hidden = false;
+  ball.destHole = -1;
+  ball.holeImmuneUntil = game.clock + 800;
+  playSound('tunnelOut');
+}
+
+/* ==========================================================
+   SIMULATION STEP — runs at a fixed 60 steps per second
+   ========================================================== */
+
+function updateFlipper(f, active) {
+  const target = active ? FLIPPER_UP : FLIPPER_REST;
+  const speed = (active ? FLIPPER_UP_SPEED : FLIPPER_DOWN_SPEED) / SUBSTEPS;
+  f.prevTipX = f.tipX;
+  f.prevTipY = f.tipY;
+  if (f.angle > target) f.angle = Math.max(target, f.angle - speed);
+  else if (f.angle < target) f.angle = Math.min(target, f.angle + speed);
+  const dirX = f.side === 'left' ? Math.cos(f.angle) : -Math.cos(f.angle);
+  f.tipX = f.px + dirX * FLIPPER_LEN;
+  f.tipY = f.py + Math.sin(f.angle) * FLIPPER_LEN;
+}
+
+const flipperWasActive = { left: false, right: false };
+
+function step() {
+  game.clock += FRAME_MS;
+
+  const leftActive = isFlipperActive('left');
+  const rightActive = isFlipperActive('right');
+  if ((leftActive && !flipperWasActive.left) || (rightActive && !flipperWasActive.right)) {
+    playSound('flipper');
+  }
+  flipperWasActive.left = leftActive;
+  flipperWasActive.right = rightActive;
+
+  for (let sub = 0; sub < SUBSTEPS; sub++) {
+    updateFlipper(flippers.left, leftActive);
+    updateFlipper(flippers.right, rightActive);
+
+    // Mushroom drifts and turns at the edges
+    mushroom.x += mushroom.dir * MUSHROOM_SPEED / SUBSTEPS;
+    if (mushroom.x > MUSHROOM_MAX_X) { mushroom.x = MUSHROOM_MAX_X; mushroom.dir = -1; }
+    if (mushroom.x < MUSHROOM_MIN_X) { mushroom.x = MUSHROOM_MIN_X; mushroom.dir = 1; }
+
+    if (!ball.active || ball.hidden) continue;
+
+    ball.vy += GRAVITY / SUBSTEPS;
+    ball.x += ball.vx / SUBSTEPS;
+    ball.y += ball.vy / SUBSTEPS;
+
+    for (const w of walls) collideSegment(w, 0.45);
+
+    targets.forEach((t, i) => {
+      let impact = -1;
+      for (const s of t.segments) impact = Math.max(impact, collideSegment(s, 0.7));
+      if (impact > 1) hitTarget(i);
+    });
+
+    collideCircle(pineTree.x, pineTree.y, pineTree.r, 0.7, 0, 0);
+
+    const mushroomVx = mushroom.dir * MUSHROOM_SPEED;
+    const hitCap = collideCircle(mushroom.x, MUSHROOM_Y + MUSHROOM_CAP_OFFSET, MUSHROOM_CAP_R, 0.8, mushroomVx, 0);
+    const hitStem = collideCircle(mushroom.x, MUSHROOM_Y + MUSHROOM_STEM_OFFSET, MUSHROOM_STEM_R, 0.8, mushroomVx, 0);
+    if (hitCap || hitStem) hitMushroom();
+
+    if (mole.pop > 0.4) {
+      const h = holes[mole.hole];
+      if (collideCircle(h.x, h.y - 4, 15, 0.9, 0, 0)) hitMole();
+    }
+
+    collideFlipper(flippers.left);
+    collideFlipper(flippers.right);
+
+    checkHoles();
+  }
+
+  if (ball.active && ball.hidden && game.clock >= ball.reappearAt) {
+    releaseFromTunnel();
+  }
+
+  if (ball.active && !ball.hidden) {
+    // Grass friction
+    for (const z of grassZones) {
+      if (ball.x > z.x && ball.x < z.x + z.w && ball.y > z.y && ball.y < z.y + z.h) {
+        ball.vx *= z.damping;
+        ball.vy *= z.damping;
+      }
+    }
+
+    // Speed limit keeps the physics stable
+    const speed = Math.hypot(ball.vx, ball.vy);
+    if (speed > MAX_SPEED) {
+      ball.vx *= MAX_SPEED / speed;
+      ball.vy *= MAX_SPEED / speed;
+    }
+
+    // If the ball comes to rest somewhere awkward, give it a gentle nudge
+    ball.slowFrames = speed < 0.2 ? ball.slowFrames + 1 : 0;
+    if (ball.slowFrames > 90) {
+      ball.vx = (Math.random() > 0.5 ? 1 : -1) * 2;
+      ball.vy = -2;
+      ball.slowFrames = 0;
+    }
+
+    // Drain: the ball fell into the river
+    if (ball.y > BOARD_H + BALL_R * 2) loseBall();
+  }
+
+  updateMole(FRAME_MS);
+
+  // Scheduled events
+  if (game.serveAt >= 0 && game.clock >= game.serveAt) {
+    game.serveAt = -1;
+    serveBall();
+  }
+  if (game.endAt >= 0 && game.clock >= game.endAt) {
+    game.endAt = -1;
+    endGame();
+  }
+
+  // Remove expired popups
+  for (let i = popups.length - 1; i >= 0; i--) {
+    if (game.clock - popups[i].born > popups[i].life) popups.splice(i, 1);
+  }
+
+  updateHud();
+}
+
+/* ==========================================================
+   GAME FLOW
+   ========================================================== */
+
+function resetBoardState() {
+  targets.forEach(t => { t.lastHit = -1e9; });
+  mole.hole = Math.floor(Math.random() * holes.length);
+  mole.pop = 0;
+  mole.phase = 'rising';
+  mole.hitCooldownUntil = 0;
+  mole.laughUntil = 0;
+  mushroom.x = 200;
+  mushroom.dir = Math.random() > 0.5 ? 1 : -1;
+  mushroom.hitCooldownUntil = 0;
+  popups.length = 0;
+  banner = null;
+  ball.active = false;
+  ball.hidden = false;
+  ball.destHole = -1;
+}
+
+function startGame() {
+  unlockAudio();
+  game.runId++;
+  game.score = 0;
+  game.ballNumber = 1;
+  game.sequenceStep = 0;
+  game.clock = 0;
+  game.serveAt = 600;
+  game.endAt = -1;
+  resetBoardState();
+  clearInput();
+  game.state = 'playing';
+  hideOverlay();
+  updateHud();
+}
+
+// Drops a new ball in from the top-right tube
+function serveBall() {
+  ball.x = ENTRY.x;
+  ball.y = ENTRY.y;
+  ball.vx = 0;   // straight down the entry lane
+  ball.vy = 0.5;
+  ball.active = true;
+  ball.hidden = false;
+  ball.destHole = -1;
+  ball.holeImmuneUntil = game.clock + 300;
+  ball.slowFrames = 0;
+}
+
+function loseBall() {
+  ball.active = false;
+  playSound('drain');
+  if (game.ballNumber < BALLS_PER_GAME) {
+    game.ballNumber++;
+    showBanner('Ball ' + game.ballNumber + ' of ' + BALLS_PER_GAME, '#1F7FCB', 1200);
+    game.serveAt = game.clock + 1100;
+  } else {
+    showBanner('Last ball gone', '#1F7FCB', 900);
+    game.endAt = game.clock + 900;
+  }
+}
+
+function togglePause() {
+  if (game.state === 'playing') {
+    game.state = 'paused';
+    clearInput();
+    showOverlay('pause');
+  } else if (game.state === 'paused') {
+    game.state = 'playing';
+    hideOverlay();
+    lastFrameTime = performance.now();
+  }
+}
+
+let hudCache = { score: -1, ball: -1, seq: -1 };
+
+function updateHud() {
+  if (hudCache.score !== game.score) {
+    scoreValue.textContent = game.score.toLocaleString();
+    hudCache.score = game.score;
+  }
+  if (hudCache.ball !== game.ballNumber) {
+    ballValue.textContent = game.ballNumber + '/' + BALLS_PER_GAME;
+    hudCache.ball = game.ballNumber;
+  }
+  if (hudCache.seq !== game.sequenceStep) {
+    sequenceLights.forEach((el, i) => el.classList.toggle('is-lit', i < game.sequenceStep));
+    hudCache.seq = game.sequenceStep;
+  }
+}
+
+/* ==========================================================
+   OVERLAY PANELS
+   ========================================================== */
+
+let overlayView = 'start';
+let leaderboardReturnView = 'start';
+
+function showOverlay(which) {
+  overlayView = which;
+  overlay.hidden = false;
+  startPanel.hidden = which !== 'start';
+  pausePanel.hidden = which !== 'pause';
+  gameOverPanel.hidden = which !== 'over';
+  leaderboardPanel.hidden = which !== 'leaderboard';
+  pauseButton.disabled = which !== 'pause';
+}
+
+// Trophy button: pauses a running game, shows the Top 10, and Back returns
+// to whichever panel was showing before.
+function openLeaderboard() {
+  if (!overlay.hidden && overlayView === 'leaderboard') return;
+  if (game.state === 'playing') {
+    game.state = 'paused';
+    clearInput();
+    leaderboardReturnView = 'pause';
+  } else {
+    leaderboardReturnView = overlay.hidden ? 'pause' : overlayView;
+  }
+  showOverlay('leaderboard');
+  viewLeaderboardList.innerHTML = '';
+  viewLeaderboardNote.textContent = 'Loading scores…';
+  loadScores().then(result => {
+    if (overlayView !== 'leaderboard') return;
+    renderLeaderboard(viewLeaderboardList, viewLeaderboardNote, result, null);
+  });
+}
+
+function closeLeaderboard() {
+  showOverlay(leaderboardReturnView);
+  if (leaderboardReturnView === 'start') refreshStartLeaderboard();
+}
+
+function hideOverlay() {
+  overlay.hidden = true;
+  pauseButton.disabled = false;
+}
+
+function endGame() {
+  game.state = 'over';
+  clearInput();
+  playSound('gameOver');
+  const runId = game.runId;
+  const finalScore = game.score;
+
+  finalScoreValue.textContent = finalScore.toLocaleString();
+  gameOverMessage.textContent = 'Checking the leaderboard…';
+  nameForm.hidden = true;
+  nameError.textContent = '';
+  playerNameInput.removeAttribute('aria-invalid');
+  saveStatus.textContent = '';
+  saveScoreButton.disabled = false;
+  gameOverLeaderboardList.innerHTML = '';
+  gameOverLeaderboardNote.textContent = '';
+  showOverlay('over');
+
+  loadScores().then(result => {
+    if (runId !== game.runId) return; // a new game has started since
+    renderLeaderboard(gameOverLeaderboardList, gameOverLeaderboardNote, result, null);
+    if (qualifies(finalScore, result.scores)) {
+      gameOverMessage.textContent = 'You made the top 10!';
+      playerNameInput.value = readLastName();
+      nameForm.hidden = false;
+    } else if (finalScore === 0) {
+      gameOverMessage.textContent = 'No litter collected this time. Be gentle with the mole!';
+    } else {
+      const lowest = result.scores[result.scores.length - 1].score;
+      gameOverMessage.textContent = 'The top 10 starts at ' + lowest.toLocaleString() + '. Have another go!';
+    }
+  });
+}
+
+function qualifies(score, scores) {
+  if (score <= 0) return false;
+  if (scores.length < LEADERBOARD_SIZE) return true;
+  return score > scores[scores.length - 1].score;
+}
+
+/* ==========================================================
+   NAME VALIDATION
+   ========================================================== */
+
+function validateName(raw) {
+  const value = raw.trim().replace(/\s+/g, ' ');
+  if (value.length === 0) {
+    return { ok: false, message: 'Type a name so everyone knows whose score this is.' };
+  }
+  if (value.length > MAX_NAME_LENGTH) {
+    return { ok: false, message: 'Names can be up to ' + MAX_NAME_LENGTH + ' characters.' };
+  }
+  if (!/^[A-Za-z0-9 '.\-]+$/.test(value)) {
+    return { ok: false, message: 'Use letters, numbers, spaces, hyphens or apostrophes only.' };
+  }
+  return { ok: true, value };
+}
+
+// Clear the error as soon as the player starts fixing the name
+playerNameInput.addEventListener('input', () => {
+  if (nameError.textContent) {
+    nameError.textContent = '';
+    playerNameInput.removeAttribute('aria-invalid');
+  }
+});
+
+nameForm.addEventListener('submit', e => {
+  e.preventDefault();
+  const check = validateName(playerNameInput.value);
+  if (!check.ok) {
+    nameError.textContent = check.message;
+    playerNameInput.setAttribute('aria-invalid', 'true');
+    playerNameInput.focus();
+    return;
+  }
+  const runId = game.runId;
+  const score = game.score;
+  saveScoreButton.disabled = true;
+  saveStatus.textContent = 'Saving your score…';
+  writeLastName(check.value);
+
+  saveScore(check.value, score).then(result => {
+    if (runId !== game.runId) return;
+    nameForm.hidden = true;
+    saveStatus.textContent = result.error ? result.error : 'Score saved.';
+    renderLeaderboard(gameOverLeaderboardList, gameOverLeaderboardNote, result, { name: check.value, score });
+  });
+});
+
+/* ==========================================================
+   LEADERBOARD — shared Google Sheet, with an on-device fallback
+   ========================================================== */
+
+// Keeps only well-formed entries, sorted highest first
+function cleanEntries(list) {
+  if (!Array.isArray(list)) return null;
+  return list
+    .filter(e => e && typeof e.name === 'string' && Number.isFinite(Number(e.score)))
+    .map(e => ({ name: e.name.slice(0, MAX_NAME_LENGTH), score: Math.max(0, Math.floor(Number(e.score))) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, LEADERBOARD_SIZE);
+}
+
+async function requestJson(url, options) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function readLocalScores() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(LOCAL_SCORES_KEY) || '[]');
+    return cleanEntries(stored) || [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function saveLocalScore(name, score) {
+  const scores = cleanEntries([...readLocalScores(), { name, score }]) || [];
+  try {
+    localStorage.setItem(LOCAL_SCORES_KEY, JSON.stringify(scores));
+  } catch (err) {
+    // Storage unavailable: the list still shows for this session
+  }
+  return scores;
+}
+
+function readLastName() {
+  try { return localStorage.getItem(LAST_NAME_KEY) || ''; } catch (err) { return ''; }
+}
+
+function writeLastName(name) {
+  try { localStorage.setItem(LAST_NAME_KEY, name); } catch (err) { /* not critical */ }
+}
+
+async function loadScores() {
+  if (LEADERBOARD_URL) {
+    try {
+      const data = await requestJson(LEADERBOARD_URL + '?action=top', { method: 'GET' });
+      const scores = cleanEntries(data && data.scores);
+      if (data && data.ok && scores) return { scores, source: 'shared' };
+      throw new Error('Unexpected response');
+    } catch (err) {
+      return {
+        scores: readLocalScores(),
+        source: 'local',
+        error: 'The family leaderboard could not be reached, so these are scores saved on this device.'
+      };
+    }
+  }
+  return { scores: readLocalScores(), source: 'local' };
+}
+
+async function saveScore(name, score) {
+  if (LEADERBOARD_URL) {
+    try {
+      // text/plain avoids a CORS preflight, which Apps Script does not answer
+      const data = await requestJson(LEADERBOARD_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ name, score })
+      });
+      const scores = cleanEntries(data && data.scores);
+      if (data && data.ok && scores) return { scores, source: 'shared' };
+      throw new Error('Unexpected response');
+    } catch (err) {
+      return {
+        scores: saveLocalScore(name, score),
+        source: 'local',
+        error: 'The family leaderboard could not be reached, so your score was saved on this device only.'
+      };
+    }
+  }
+  return { scores: saveLocalScore(name, score), source: 'local' };
+}
+
+// highlight: the entry just saved, shown in gold
+function renderLeaderboard(listEl, noteEl, result, highlight) {
+  listEl.innerHTML = '';
+  let highlighted = false;
+
+  if (result.scores.length === 0) {
+    const empty = document.createElement('li');
+    empty.className = 'leaderboard-empty';
+    empty.textContent = 'No scores yet. Be the first on the board.';
+    listEl.appendChild(empty);
+  }
+
+  result.scores.forEach((entry, i) => {
+    const row = document.createElement('li');
+    row.className = 'leaderboard-row';
+    if (highlight && !highlighted && entry.name === highlight.name && entry.score === highlight.score) {
+      row.classList.add('is-new');
+      highlighted = true;
+    }
+    const rank = document.createElement('span');
+    rank.className = 'leaderboard-rank';
+    rank.textContent = String(i + 1);
+    const name = document.createElement('span');
+    name.className = 'leaderboard-name';
+    name.textContent = entry.name;
+    const score = document.createElement('span');
+    score.className = 'leaderboard-score';
+    score.textContent = entry.score.toLocaleString();
+    row.append(rank, name, score);
+    listEl.appendChild(row);
+  });
+
+  if (result.error) {
+    noteEl.textContent = result.error;
+  } else {
+    noteEl.textContent = result.source === 'shared' ? 'Shared with the whole family.' : 'Saved on this device.';
+  }
+}
+
+function refreshStartLeaderboard() {
+  startLeaderboardList.innerHTML = '';
+  startLeaderboardNote.textContent = 'Loading scores…';
+  loadScores().then(result => {
+    renderLeaderboard(startLeaderboardList, startLeaderboardNote, result, null);
+  });
+}
+
+/* ==========================================================
+   SOUND — generated with the Web Audio API, no sound files
+   ========================================================== */
+
+const SOUND_PREF_KEY = 'gardenPinball.soundOn';
+const audio = { ctx: null, noiseBuffer: null, on: readSoundPref() };
+
+function readSoundPref() {
+  try { return localStorage.getItem(SOUND_PREF_KEY) !== 'off'; } catch (err) { return true; }
+}
+
+function writeSoundPref(on) {
+  try { localStorage.setItem(SOUND_PREF_KEY, on ? 'on' : 'off'); } catch (err) { /* not critical */ }
+}
+
+// Phones only allow audio to start after a tap, so this runs on button presses
+function unlockAudio() {
+  if (!audio.on) return null;
+  if (!audio.ctx) {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return null; // browser without Web Audio: play silently
+    audio.ctx = new AudioCtx();
+    // One second of white noise, reused for clicks, whooshes and splashes
+    const length = audio.ctx.sampleRate;
+    audio.noiseBuffer = audio.ctx.createBuffer(1, length, audio.ctx.sampleRate);
+    const data = audio.noiseBuffer.getChannelData(0);
+    for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
+  }
+  if (audio.ctx.state === 'suspended') audio.ctx.resume();
+  return audio.ctx;
+}
+
+// A single pitched note with a quick fade in and out
+function playTone(freq, freqEnd, type, duration, volume, delay) {
+  const ac = audio.ctx;
+  const t = ac.currentTime + (delay || 0);
+  const osc = ac.createOscillator();
+  const gain = ac.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t);
+  if (freqEnd) osc.frequency.exponentialRampToValueAtTime(freqEnd, t + duration);
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(volume, t + 0.006);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+  osc.connect(gain).connect(ac.destination);
+  osc.start(t);
+  osc.stop(t + duration + 0.03);
+}
+
+// Filtered noise: the filter sweep gives it character (click, whoosh, splash)
+function playNoise(filterType, freq, freqEnd, duration, volume, delay) {
+  const ac = audio.ctx;
+  const t = ac.currentTime + (delay || 0);
+  const src = ac.createBufferSource();
+  src.buffer = audio.noiseBuffer;
+  const filter = ac.createBiquadFilter();
+  filter.type = filterType;
+  filter.frequency.setValueAtTime(freq, t);
+  if (freqEnd) filter.frequency.exponentialRampToValueAtTime(freqEnd, t + duration);
+  const gain = ac.createGain();
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(volume, t + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+  src.connect(filter).connect(gain).connect(ac.destination);
+  src.start(t);
+  src.stop(t + duration + 0.03);
+}
+
+function playSound(name, detail) {
+  if (!audio.on || !audio.ctx || audio.ctx.state !== 'running') return;
+  switch (name) {
+    case 'flipper':
+      playNoise('bandpass', 1800, 900, 0.05, 0.35);
+      playTone(160, 90, 'square', 0.04, 0.05);
+      break;
+    case 'target': {
+      // Hollow wooden tock, higher for bigger numbers
+      const base = 420 + (detail || 0) * 110;
+      playTone(base, base * 0.85, 'triangle', 0.1, 0.35);
+      playNoise('highpass', 3000, null, 0.02, 0.12);
+      break;
+    }
+    case 'cleanSweep':
+      [523, 659, 784, 1047, 1319].forEach((f, i) => playTone(f, null, 'triangle', 0.16, 0.25, i * 0.08));
+      break;
+    case 'mole':
+      playTone(900, 1700, 'sine', 0.12, 0.3);
+      playTone(1700, 1100, 'sine', 0.12, 0.25, 0.12);
+      break;
+    case 'mushroom':
+      playTone(130, 70, 'sawtooth', 0.32, 0.12);
+      playTone(137, 74, 'sawtooth', 0.32, 0.08);
+      break;
+    case 'tunnelIn':
+      playNoise('bandpass', 400, 1600, 0.35, 0.3);
+      break;
+    case 'tunnelOut':
+      playTone(300, 900, 'sine', 0.08, 0.3);
+      break;
+    case 'drain':
+      playNoise('lowpass', 1400, 250, 0.55, 0.4);
+      break;
+    case 'gameOver':
+      [523, 440, 349, 262].forEach((f, i) => playTone(f, null, 'triangle', 0.24, 0.22, i * 0.18));
+      break;
+  }
+}
+
+function updateSoundButton() {
+  soundButton.innerHTML = audio.on ? '&#128266;' : '&#128263;';
+  soundButton.setAttribute('aria-pressed', String(audio.on));
+  soundButton.setAttribute('aria-label', audio.on ? 'Turn sound off' : 'Turn sound on');
+  soundButton.title = audio.on ? 'Sound on' : 'Sound off';
+}
+
+function toggleSound() {
+  audio.on = !audio.on;
+  writeSoundPref(audio.on);
+  if (audio.on) unlockAudio();
+  updateSoundButton();
+}
+
+/* ==========================================================
+   BUTTONS AND PAGE EVENTS
+   ========================================================== */
+
+startButton.addEventListener('click', startGame);
+playAgainButton.addEventListener('click', startGame);
+resumeButton.addEventListener('click', togglePause);
+restartButton.addEventListener('click', startGame);
+pauseButton.addEventListener('click', togglePause);
+leaderboardButton.addEventListener('click', openLeaderboard);
+leaderboardBackButton.addEventListener('click', closeLeaderboard);
+soundButton.addEventListener('click', toggleSound);
+
+// Pause automatically if the player switches apps
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && game.state === 'playing') togglePause();
+});
+
+window.addEventListener('resize', resizeBoard);
+
+/* ==========================================================
+   MAIN LOOP — fixed-step simulation, render every frame
+   ========================================================== */
+
+let lastFrameTime = performance.now();
+let accumulator = 0;
+
+function frame(now) {
+  const elapsed = Math.min(100, now - lastFrameTime); // cap after long stalls
+  lastFrameTime = now;
+
+  if (game.state === 'playing') {
+    accumulator += elapsed;
+    while (accumulator >= FRAME_MS) {
+      step();
+      accumulator -= FRAME_MS;
+      if (game.state !== 'playing') { accumulator = 0; break; }
+    }
+  } else {
+    accumulator = 0;
+  }
+
+  render();
+  requestAnimationFrame(frame);
+}
+
+/* ==========================================================
+   START UP
+   ========================================================== */
+
+resetBoardState();
+mole.pop = 1;
+mole.phase = 'up';
+updateFlipper(flippers.left, false);
+updateFlipper(flippers.right, false);
+resizeBoard();
+updateHud();
+updateSoundButton();
+showOverlay('start');
+refreshStartLeaderboard();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
